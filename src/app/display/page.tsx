@@ -40,14 +40,11 @@ function IdleScreen({ joinUrl, qr }: { joinUrl: string; qr: string }) {
     <div className="w-full h-full flex items-center justify-center" style={{ gap: '6vw', padding: '4vw' }}>
       <div className="flex flex-col items-start" style={{ gap: '1.5vw' }}>
         <img src="/logo.png" alt="Lie Hard" style={{ width: '14vw' }} />
-        <p className="font-display font-black uppercase leading-none" style={{ fontSize: '7vw' }}>
-          Round 2
-        </p>
-        <p className="font-display font-bold uppercase leading-none" style={{ fontSize: '3.4vw', color: AMBER }}>
-          Two lies. One truth.
+        <p className="font-display font-black uppercase leading-none" style={{ fontSize: '5vw', color: AMBER }}>
+          Two truths. One lie.
         </p>
         <p className="text-zinc-400" style={{ fontSize: '1.6vw', maxWidth: '38vw' }}>
-          Scan to play along — just enter your name. Spot the truth to climb the leaderboard.
+          Scan to play along — just enter your name.
         </p>
       </div>
       <QrCard joinUrl={joinUrl} qr={qr} size="26vw" />
@@ -81,9 +78,6 @@ function RoundScreen({ game }: { game: Seg2Game }) {
       {/* Header: player + status */}
       <div className="flex items-end justify-between" style={{ gap: '2vw' }}>
         <div>
-          <p className="uppercase text-zinc-500" style={{ fontSize: '1.2vw', letterSpacing: '0.4em' }}>
-            Round 2 · Spot the truth
-          </p>
           <p className="font-display font-black leading-none" style={{ fontSize: '6vw' }}>
             {player.name}
           </p>
@@ -92,9 +86,9 @@ function RoundScreen({ game }: { game: Seg2Game }) {
           {result ? (
             <p
               className="font-display font-black uppercase animate-reveal-pop leading-none"
-              style={{ fontSize: '4.4vw', color: '#4ade80', textShadow: '0 0 4vw rgba(74,222,128,0.45)' }}
+              style={{ fontSize: '4.4vw', color: '#f87171', textShadow: '0 0 4vw rgba(248,113,113,0.45)' }}
             >
-              Statement {result.truthIndex + 1} is the truth
+              Statement {result.lieIndex + 1} is the lie
             </p>
           ) : game.votingOpen ? (
             <>
@@ -113,8 +107,8 @@ function RoundScreen({ game }: { game: Seg2Game }) {
       <div className="flex-1 min-h-0 grid grid-cols-3" style={{ gap: '1.5vw' }}>
         {player.statements.map((text, i) => {
           const visible = game.votingOpen || !!result || game.shown.includes(i);
-          const isTruth = result?.truthIndex === i;
-          const color = result ? (isTruth ? '#4ade80' : '#f87171') : STMT_COLORS[i];
+          const isLie = result?.lieIndex === i;
+          const color = result ? (isLie ? '#f87171' : '#4ade80') : STMT_COLORS[i];
           const pct = total ? Math.round((counts[i] / total) * 100) : 0;
           return (
             <div
@@ -122,9 +116,9 @@ function RoundScreen({ game }: { game: Seg2Game }) {
               className="rounded-3xl flex flex-col animate-fade-in"
               style={{
                 padding: '2vw',
-                background: result && isTruth ? 'rgba(74,222,128,0.1)' : '#0d0d0f',
+                background: result && isLie ? 'rgba(248,113,113,0.1)' : '#0d0d0f',
                 border: `0.2vw solid ${result ? color : visible ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.12)'}`,
-                opacity: result && !isTruth ? 0.6 : 1,
+                opacity: result && !isLie ? 0.6 : 1,
               }}
             >
               <div className="flex items-center justify-between">
@@ -133,7 +127,7 @@ function RoundScreen({ game }: { game: Seg2Game }) {
                 </p>
                 {result && (
                   <p className="font-display font-black uppercase animate-reveal-pop" style={{ fontSize: '2.2vw', color }}>
-                    {isTruth ? 'Truth' : 'Lie'}
+                    {isLie ? 'Lie' : 'Truth'}
                   </p>
                 )}
               </div>
@@ -167,8 +161,8 @@ function RoundScreen({ game }: { game: Seg2Game }) {
       {result && result.total > 0 && (
         <p className="font-display text-center animate-fade-in" style={{ fontSize: '2.4vw' }}>
           <span style={{ color: AMBER }}>{player.name}</span> fooled{' '}
-          <span className="font-black">{result.total - result.counts[result.truthIndex]}</span> of {result.total} (
-          {Math.round(((result.total - result.counts[result.truthIndex]) / result.total) * 100)}%)
+          <span className="font-black">{result.total - result.counts[result.lieIndex]}</span> of {result.total} (
+          {Math.round(((result.total - result.counts[result.lieIndex]) / result.total) * 100)}%)
         </p>
       )}
     </div>
@@ -224,7 +218,7 @@ function Leaderboard({ rows }: { rows: { key: string; name: string; value: strin
 function VotersOverlay({ game }: { game: Seg2Game }) {
   const rows = topVoters(game, 10).map((v) => ({ key: v.id, name: v.name, value: String(v.correct), sub: 'correct' }));
   return (
-    <OverlayShell title="Top truth spotters">
+    <OverlayShell title="Top lie spotters">
       <Leaderboard rows={rows} />
     </OverlayShell>
   );

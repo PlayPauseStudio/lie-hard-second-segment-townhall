@@ -1,4 +1,4 @@
-player_name,truth,lie_1,lie_2
-Karan,I studied in London for 2 years,I failed my driving test 5 times,I have a twin sister
-Priya,I once met Shah Rukh Khan at an airport,I can solve a Rubik's cube in a minute,I have never seen the sea
-Rohit,I ate 40 golgappas in one sitting,I was a child actor in a soap ad,I have been to Iceland
+player_name,truth_1,truth_2,lie
+Karan,I studied in London for 2 years,I have a twin sister,I failed my driving test 5 times
+Priya,I once met Shah Rukh Khan at an airport,I have never seen the sea,I can solve a Rubik's cube in a minute
+Rohit,I ate 40 golgappas in one sitting,I have been to Iceland,I was a child actor in a soap ad

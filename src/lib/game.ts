@@ -7,7 +7,7 @@ import { db } from './firebase';
 
 // ── Firestore layout ────────────────────────────────────────────────────────
 // seg2Game/live          public game state (operator writes, everyone reads)
-// seg2Private/answers    which statement is the truth, per player (operator only)
+// seg2Private/answers    which statement is the lie, per player (operator only)
 // seg2Voters/{clientId}  audience join record: { name, joinedAt }
 // seg2Votes/{roundKey}_{clientId}  one vote per phone per round
 // See web/firestore.rules in the lie-hard-live repo (same Firebase project).
@@ -17,21 +17,21 @@ export const MAX_PLAYERS = 100;
 export interface Seg2Player {
   id: number;
   name: string;
-  statements: [string, string, string]; // already shuffled; truth position is private
+  statements: [string, string, string]; // already shuffled; lie position is private
 }
 
 export interface RoundResult {
-  truthIndex: number;
+  lieIndex: number;
   counts: [number, number, number];
   total: number;
   correctIds?: string[]; // voters awarded a point — lets the operator undo a reveal
 }
 
 export interface DoneRecord {
-  truthIndex: number;
+  lieIndex: number;
   fooled: number;
   total: number;
-  roundKey?: string; // lets a truth edit after reveal re-tally that round
+  roundKey?: string; // lets a lie edit after reveal re-tally that round
   correctIds?: string[];
 }
 
@@ -132,12 +132,12 @@ export function bestLiars(game: Seg2Game, n = 10) {
 }
 
 // ── CSV ─────────────────────────────────────────────────────────────────────
-// Columns: player_name, truth, lie_1, lie_2 (header names are case-insensitive;
-// "name", "lie1", "lie2" also accepted). Lines starting with # are ignored.
+// Columns: player_name, truth_1, truth_2, lie (header names are case-insensitive;
+// "name", "truth1", "truth2" also accepted). Lines starting with # are ignored.
 
 export interface ParsedCsv {
   players: Seg2Player[];
-  truth: { [playerId: string]: number };
+  lie: { [playerId: string]: number };
   errors: string[];
 }
 
@@ -158,35 +158,35 @@ export function parseCsv(text: string): ParsedCsv {
   });
   const errors: string[] = [];
   const players: Seg2Player[] = [];
-  const truth: { [id: string]: number } = {};
+  const lie: { [id: string]: number } = {};
 
   res.data.forEach((row, i) => {
     const line = i + 2;
     const name = pick(row, 'player_name', 'name', 'player');
-    const t = pick(row, 'truth');
-    const l1 = pick(row, 'lie_1', 'lie1');
-    const l2 = pick(row, 'lie_2', 'lie2');
-    if (!name || !t || !l1 || !l2) {
-      errors.push(`Row ${line}: needs player_name, truth, lie_1 and lie_2.`);
+    const t1 = pick(row, 'truth_1', 'truth1');
+    const t2 = pick(row, 'truth_2', 'truth2');
+    const l = pick(row, 'lie');
+    if (!name || !t1 || !t2 || !l) {
+      errors.push(`Row ${line}: needs player_name, truth_1, truth_2 and lie.`);
       return;
     }
-    // Shuffle so the truth isn't always in the same slot.
+    // Shuffle so the lie isn't always in the same slot.
     const order = [0, 1, 2];
     for (let j = order.length - 1; j > 0; j--) {
       const k = Math.floor(Math.random() * (j + 1));
       [order[j], order[k]] = [order[k], order[j]];
     }
-    const src = [t, l1, l2];
+    const src = [t1, t2, l];
     const id = players.length + 1;
     players.push({ id, name, statements: order.map((o) => src[o]) as [string, string, string] });
-    truth[id] = order.indexOf(0);
+    lie[id] = order.indexOf(2);
   });
 
   if (players.length > MAX_PLAYERS) {
     errors.push(`${players.length} players found — the limit is ${MAX_PLAYERS}.`);
   }
   if (!players.length && !errors.length) errors.push('No players found in the file.');
-  return { players, truth, errors };
+  return { players, lie, errors };
 }
 
 export const STMT_COLORS = ['#fbbf24', '#a78bfa', '#34d399'];

@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Lie Hard — Round 2',
-  description: 'Two lies, one truth. Spot the truth and play along.',
+  description: 'Two truths, one lie. Spot the lie and play along.',
 };
 
 export const viewport: Viewport = {

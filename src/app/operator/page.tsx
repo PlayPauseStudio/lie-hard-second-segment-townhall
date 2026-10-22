@@ -105,7 +105,7 @@ async function deleteAll(col: CollectionReference) {
 
 function Panel({ onLock }: { onLock: () => void }) {
   const game = useGame();
-  const [truth, setTruth] = useState<{ [id: string]: number }>({});
+  const [lies, setLies] = useState<{ [id: string]: number }>({});
   const [joined, setJoined] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -113,7 +113,7 @@ function Panel({ onLock }: { onLock: () => void }) {
 
   useEffect(
     () =>
-      onSnapshot(answersRef, (snap) => setTruth((snap.data()?.truth as { [id: string]: number }) ?? {}), (err) =>
+      onSnapshot(answersRef, (snap) => setLies((snap.data()?.lie as { [id: string]: number }) ?? {}), (err) =>
         console.error('answers listener', err),
       ),
     [],
@@ -166,7 +166,7 @@ function Panel({ onLock }: { onLock: () => void }) {
       ) : (
         <div className="grid lg:grid-cols-[1fr_380px] gap-4 items-start">
           <div className="flex flex-col gap-4">
-            <RoundControls game={game} truth={truth} busy={busy} run={run} onEdit={setEditing} />
+            <RoundControls game={game} lies={lies} busy={busy} run={run} onEdit={setEditing} />
             <PlayerGrid game={game} busy={busy} run={run} onEdit={setEditing} />
           </div>
           <div className="flex flex-col gap-4">
@@ -181,13 +181,13 @@ function Panel({ onLock }: { onLock: () => void }) {
       {game && editing !== null && (
         <EditPlayer
           game={game}
-          truth={truth}
+          lies={lies}
           playerId={editing}
           busy={busy}
           onClose={() => setEditing(null)}
           onSave={(edit) =>
             run(async () => {
-              await savePlayer(game, truth, editing, edit);
+              await savePlayer(game, lies, editing, edit);
               setEditing(null);
             })
           }
@@ -214,7 +214,7 @@ function CsvUpload({ game, busy, run, compact }: { game: Seg2Game | null; busy: 
     run(async () => {
       if (!parsed || parsed.errors.length) return;
       if (game?.players.length && !confirm(`Replace the current ${game.players.length} players? Round progress will be cleared.`)) return;
-      await setDoc(answersRef, { truth: parsed.truth });
+      await setDoc(answersRef, { lie: parsed.lie });
       await setDoc(gameRef, {
         ...emptyGame(),
         players: parsed.players,
@@ -235,8 +235,8 @@ function CsvUpload({ game, busy, run, compact }: { game: Seg2Game | null; busy: 
       </div>
       {!compact && (
         <p className="text-sm text-zinc-400">
-          One row per player, up to {MAX_PLAYERS}. Columns: <code className="text-amber-300">player_name, truth, lie_1, lie_2</code>.
-          The three statements are shuffled on load, so the truth isn’t always in the same spot.
+          One row per player, up to {MAX_PLAYERS}. Columns: <code className="text-amber-300">player_name, truth_1, truth_2, lie</code>.
+          The three statements are shuffled on load, so the lie isn’t always in the same spot.
         </p>
       )}
       <input
@@ -263,7 +263,7 @@ function CsvUpload({ game, busy, run, compact }: { game: Seg2Game | null; busy: 
                 <div key={p.id} className="px-3 py-1.5 border-b border-zinc-900 last:border-0">
                   <b>{p.name}</b>{' '}
                   <span className="text-zinc-500">
-                    — truth: {p.statements[parsed.truth[p.id]]}
+                    — lie: {p.statements[parsed.lie[p.id]]}
                   </span>
                 </div>
               ))}
@@ -286,20 +286,20 @@ function CsvUpload({ game, busy, run, compact }: { game: Seg2Game | null; busy: 
 
 function RoundControls({
   game,
-  truth,
+  lies,
   busy,
   run,
   onEdit,
 }: {
   game: Seg2Game;
-  truth: { [id: string]: number };
+  lies: { [id: string]: number };
   busy: boolean;
   run: RunFn;
   onEdit: (id: number) => void;
 }) {
   const player = game.players.find((p) => p.id === game.currentId);
   const live = useRoundVotes(game.roundKey);
-  const truthIndex = player ? truth[player.id] : undefined;
+  const lieIndex = player ? lies[player.id] : undefined;
 
   if (!player || !game.roundKey) {
     const next = game.players.find((p) => !game.done[p.id]);
@@ -325,7 +325,7 @@ function RoundControls({
 
   const reveal = () =>
     run(async () => {
-      if (game.result || truthIndex === undefined || !game.roundKey) return;
+      if (game.result || lieIndex === undefined || !game.roundKey) return;
       await updateDoc(gameRef, { votingOpen: false });
       const snap = await getDocs(query(votesCol, where('roundKey', '==', game.roundKey)));
       const counts: [number, number, number] = [0, 0, 0];
@@ -335,7 +335,7 @@ function RoundControls({
         const v = d.data() as { clientId: string; name: string; choice: number };
         if (v.choice < 0 || v.choice > 2 || !/^v[a-z0-9]+$/.test(v.clientId)) return;
         counts[v.choice]++;
-        if (v.choice === truthIndex) {
+        if (v.choice === lieIndex) {
           correctIds.push(v.clientId);
           upd[`voterScores.${v.clientId}.name`] = v.name;
           upd[`voterScores.${v.clientId}.correct`] = increment(1);
@@ -344,8 +344,8 @@ function RoundControls({
       const total = counts[0] + counts[1] + counts[2];
       await updateDoc(gameRef, {
         ...upd,
-        result: { truthIndex, counts, total, correctIds },
-        [`done.${player.id}`]: { truthIndex, fooled: total - counts[truthIndex], total, roundKey: game.roundKey, correctIds },
+        result: { lieIndex, counts, total, correctIds },
+        [`done.${player.id}`]: { lieIndex, fooled: total - counts[lieIndex], total, roundKey: game.roundKey, correctIds },
         shown: [0, 1, 2],
       });
     });
@@ -381,20 +381,20 @@ function RoundControls({
 
       <div className="grid md:grid-cols-3 gap-3">
         {player.statements.map((s, i) => {
-          const isTruth = truthIndex === i;
+          const isLie = lieIndex === i;
           const shown = game.shown.includes(i) || game.votingOpen || !!game.result;
           const count = game.result ? game.result.counts[i] : live.counts[i];
           return (
             <div
               key={i}
               className="rounded-xl p-3 flex flex-col gap-2"
-              style={{ border: `2px solid ${isTruth ? '#16a34a' : '#27272a'}`, background: isTruth ? 'rgba(22,163,74,0.08)' : '#0b0b0d' }}
+              style={{ border: `2px solid ${isLie ? '#dc2626' : '#27272a'}`, background: isLie ? 'rgba(220,38,38,0.08)' : '#0b0b0d' }}
             >
               <div className="flex items-center justify-between">
                 <span className="font-display uppercase tracking-widest text-sm" style={{ color: STMT_COLORS[i] }}>
                   Statement {i + 1}
                 </span>
-                <span className={`text-xs font-bold ${isTruth ? 'text-green-400' : 'text-red-400'}`}>{isTruth ? 'TRUTH' : 'LIE'}</span>
+                <span className={`text-xs font-bold ${isLie ? 'text-red-400' : 'text-green-400'}`}>{isLie ? 'LIE' : 'TRUTH'}</span>
               </div>
               <p className="text-sm leading-snug flex-1">{s}</p>
               <div className="flex items-center justify-between">
@@ -424,8 +424,8 @@ function RoundControls({
           </button>
         )}
         {!game.result && (
-          <button disabled={busy || truthIndex === undefined} onClick={reveal} className="btn btn-amber">
-            Reveal truth
+          <button disabled={busy || lieIndex === undefined} onClick={reveal} className="btn btn-amber">
+            Reveal lie
           </button>
         )}
         {game.result && (
@@ -456,7 +456,7 @@ function RoundControls({
           </button>
         )}
       </div>
-      {truthIndex === undefined && <p className="text-sm text-red-400">No answer stored for this player — re-upload the CSV.</p>}
+      {lieIndex === undefined && <p className="text-sm text-red-400">No answer stored for this player — re-upload the CSV.</p>}
     </section>
   );
 }
@@ -478,19 +478,19 @@ async function selectPlayer(game: Seg2Game, id: number) {
 interface PlayerEdit {
   name: string;
   statements: [string, string, string];
-  truthIndex: number;
+  lieIndex: number;
 }
 
-async function savePlayer(game: Seg2Game, truth: { [id: string]: number }, target: number | 'new', edit: PlayerEdit) {
+async function savePlayer(game: Seg2Game, lies: { [id: string]: number }, target: number | 'new', edit: PlayerEdit) {
   const id = target === 'new' ? Math.max(0, ...game.players.map((p) => p.id)) + 1 : target;
   const player = { id, name: edit.name, statements: edit.statements };
   const players = target === 'new' ? [...game.players, player] : game.players.map((p) => (p.id === id ? player : p));
   const upd: Record<string, unknown> = { players };
 
   const d = game.done[id];
-  if (d && truth[id] !== edit.truthIndex) {
+  if (d && lies[id] !== edit.lieIndex) {
     if (!d.roundKey) throw new Error('This round was revealed before score recalculation existed — undo the reveal and reveal again instead.');
-    // Re-tally the already-revealed round against the new truth.
+    // Re-tally the already-revealed round against the new lie.
     const snap = await getDocs(query(votesCol, where('roundKey', '==', d.roundKey)));
     const counts: [number, number, number] = [0, 0, 0];
     const correctIds: string[] = [];
@@ -499,33 +499,33 @@ async function savePlayer(game: Seg2Game, truth: { [id: string]: number }, targe
       const v = vd.data() as { clientId: string; name: string; choice: number };
       if (v.choice < 0 || v.choice > 2 || !/^v[a-z0-9]+$/.test(v.clientId)) return;
       counts[v.choice]++;
-      if (v.choice === edit.truthIndex) {
+      if (v.choice === edit.lieIndex) {
         correctIds.push(v.clientId);
         upd[`voterScores.${v.clientId}.name`] = v.name;
         upd[`voterScores.${v.clientId}.correct`] = increment(1);
       }
     });
     const total = counts[0] + counts[1] + counts[2];
-    upd[`done.${id}`] = { truthIndex: edit.truthIndex, fooled: total - counts[edit.truthIndex], total, roundKey: d.roundKey, correctIds };
+    upd[`done.${id}`] = { lieIndex: edit.lieIndex, fooled: total - counts[edit.lieIndex], total, roundKey: d.roundKey, correctIds };
     if (game.currentId === id && game.result && game.roundKey === d.roundKey) {
-      upd.result = { truthIndex: edit.truthIndex, counts, total, correctIds };
+      upd.result = { lieIndex: edit.lieIndex, counts, total, correctIds };
     }
   }
 
-  await setDoc(answersRef, { truth: { [id]: edit.truthIndex } }, { merge: true });
+  await setDoc(answersRef, { lie: { [id]: edit.lieIndex } }, { merge: true });
   await updateDoc(gameRef, upd);
 }
 
 function EditPlayer({
   game,
-  truth,
+  lies,
   playerId,
   busy,
   onClose,
   onSave,
 }: {
   game: Seg2Game;
-  truth: { [id: string]: number };
+  lies: { [id: string]: number };
   playerId: number | 'new';
   busy: boolean;
   onClose: () => void;
@@ -534,19 +534,19 @@ function EditPlayer({
   const existing = playerId === 'new' ? null : game.players.find((p) => p.id === playerId);
   const [name, setName] = useState(existing?.name ?? '');
   const [statements, setStatements] = useState<[string, string, string]>(existing ? [...existing.statements] : ['', '', '']);
-  const [truthIndex, setTruthIndex] = useState<number>(existing ? (truth[existing.id] ?? 0) : 0);
+  const [lieIndex, setLieIndex] = useState<number>(existing ? (lies[existing.id] ?? 0) : 0);
 
   const revealed = !!existing && !!game.done[existing.id];
-  const truthChanged = !!existing && truth[existing.id] !== truthIndex;
+  const lieChanged = !!existing && lies[existing.id] !== lieIndex;
   const valid = !!name.trim() && statements.every((s) => s.trim());
 
   const save = () => {
     if (!valid) return;
-    if (revealed && truthChanged && !confirm('This player was already revealed. Changing the truth will recalculate audience scores for their round. Continue?')) return;
+    if (revealed && lieChanged && !confirm('This player was already revealed. Changing the lie will recalculate audience scores for their round. Continue?')) return;
     onSave({
       name: name.trim(),
       statements: statements.map((s) => s.trim()) as [string, string, string],
-      truthIndex,
+      lieIndex,
     });
   };
 
@@ -572,9 +572,9 @@ function EditPlayer({
                 Statement {i + 1}
               </span>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="truth" checked={truthIndex === i} onChange={() => setTruthIndex(i)} />
-                <span className={truthIndex === i ? 'text-green-400 font-semibold' : 'text-zinc-500'}>
-                  {truthIndex === i ? 'TRUTH' : 'Mark as truth'}
+                <input type="radio" name="lie" checked={lieIndex === i} onChange={() => setLieIndex(i)} />
+                <span className={lieIndex === i ? 'text-red-400 font-semibold' : 'text-zinc-500'}>
+                  {lieIndex === i ? 'LIE' : 'Mark as lie'}
                 </span>
               </label>
             </div>
@@ -583,11 +583,11 @@ function EditPlayer({
               rows={2}
               onChange={(e) => setStatements((prev) => prev.map((x, j) => (j === i ? e.target.value : x)) as [string, string, string])}
               className="rounded-lg bg-zinc-900 px-3 py-2 outline-none border"
-              style={{ borderColor: truthIndex === i ? '#16a34a' : '#3f3f46' }}
+              style={{ borderColor: lieIndex === i ? '#dc2626' : '#3f3f46' }}
             />
           </div>
         ))}
-        {revealed && truthChanged && (
+        {revealed && lieChanged && (
           <p className="text-sm text-amber-400">Already revealed — saving will recalculate audience scores for this round.</p>
         )}
         <div className="flex justify-end gap-2">
@@ -763,7 +763,7 @@ function DangerZone({ busy, run }: { busy: boolean; run: RunFn }) {
             if (!confirm('Start a new show? This deletes all players, votes, audience names and scores.')) return;
             await deleteAll(votesCol);
             await deleteAll(votersCol);
-            await setDoc(answersRef, { truth: {} });
+            await setDoc(answersRef, { lie: {} });
             await setDoc(gameRef, emptyGame());
           })
         }

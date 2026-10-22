@@ -71,10 +71,10 @@ function JoinForm({ clientId, onJoined }: { clientId: string; onJoined: (n: stri
     <main className="min-h-[100dvh] flex flex-col items-center justify-center px-4 py-10">
       <img src="/logo.png" alt="Lie Hard" className="w-32 mb-6" />
       <h1 className="font-display text-4xl font-black uppercase text-center leading-none">
-        Spot the <span style={{ color: 'var(--amber)' }}>Truth</span>
+        Spot the <span style={{ color: 'var(--amber)' }}>Lie</span>
       </h1>
       <p className="text-zinc-400 text-center mt-3 max-w-xs">
-        Each player tells you three things. Two are lies. Pick the one that’s true.
+        Each player tells you three things. Two are true. Pick the lie.
       </p>
       <form onSubmit={submit} className="w-full max-w-sm mt-8 flex flex-col gap-3">
         <input
@@ -152,18 +152,18 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
     const statusLine = result
       ? chosen === null
         ? 'You didn’t vote this round'
-        : chosen === result.truthIndex
-          ? 'You spotted the truth!'
+        : chosen === result.lieIndex
+          ? 'You spotted the lie!'
           : 'Fooled you!'
       : game.votingOpen
         ? chosen === null
-          ? 'Which one is the TRUTH?'
+          ? 'Which one is the LIE?'
           : 'Vote locked in — tap another to change'
         : chosen === null
           ? 'Get ready to vote…'
           : 'Votes are closed';
     const statusColor = result
-      ? chosen !== null && chosen === result.truthIndex
+      ? chosen !== null && chosen === result.lieIndex
         ? '#4ade80'
         : '#f87171'
       : 'var(--amber)';
@@ -184,16 +184,16 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
           {player.statements.map((text, i) => {
             const visible = game.votingOpen || !!result || game.shown.includes(i);
             const isChosen = chosen === i;
-            const isTruth = result?.truthIndex === i;
+            const isLie = result?.lieIndex === i;
             let border = 'rgba(245,158,11,0.2)';
             let bg = 'var(--card)';
             if (result) {
-              if (isTruth) {
-                border = '#4ade80';
-                bg = 'rgba(74,222,128,0.12)';
-              } else if (isChosen) {
+              if (isLie) {
                 border = '#f87171';
-                bg = 'rgba(248,113,113,0.1)';
+                bg = 'rgba(248,113,113,0.12)';
+              } else if (isChosen) {
+                border = '#71717a';
+                bg = 'rgba(113,113,122,0.12)';
               }
             } else if (isChosen) {
               border = STMT_COLORS[i];
@@ -214,8 +214,8 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
                   >
                     Statement {i + 1}
                   </span>
-                  {result && isTruth && <span className="text-green-400 text-sm font-semibold">TRUTH</span>}
-                  {result && !isTruth && <span className="text-red-400 text-sm font-semibold">LIE</span>}
+                  {result && isLie && <span className="text-red-400 text-sm font-semibold">LIE</span>}
+                  {result && !isLie && <span className="text-green-400 text-sm font-semibold">TRUTH</span>}
                   {!result && isChosen && <span className="text-amber-400 text-sm font-semibold">Your pick</span>}
                 </div>
                 <p className={`text-lg leading-snug ${visible ? 'text-white' : 'text-zinc-600'}`}>
