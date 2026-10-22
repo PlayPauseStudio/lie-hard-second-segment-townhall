@@ -31,6 +31,8 @@ export interface DoneRecord {
   truthIndex: number;
   fooled: number;
   total: number;
+  roundKey?: string; // lets a truth edit after reveal re-tally that round
+  correctIds?: string[];
 }
 
 export type Overlay = 'none' | 'join' | 'voters' | 'liars';

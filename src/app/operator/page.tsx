@@ -109,6 +109,7 @@ function Panel({ onLock }: { onLock: () => void }) {
   const [joined, setJoined] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState<number | 'new' | null>(null);
 
   useEffect(
     () =>
@@ -165,8 +166,8 @@ function Panel({ onLock }: { onLock: () => void }) {
       ) : (
         <div className="grid lg:grid-cols-[1fr_380px] gap-4 items-start">
           <div className="flex flex-col gap-4">
-            <RoundControls game={game} truth={truth} busy={busy} run={run} />
-            <PlayerGrid game={game} busy={busy} run={run} />
+            <RoundControls game={game} truth={truth} busy={busy} run={run} onEdit={setEditing} />
+            <PlayerGrid game={game} busy={busy} run={run} onEdit={setEditing} />
           </div>
           <div className="flex flex-col gap-4">
             <OverlayControls game={game} busy={busy} run={run} />
@@ -175,6 +176,22 @@ function Panel({ onLock }: { onLock: () => void }) {
             <DangerZone busy={busy} run={run} />
           </div>
         </div>
+      )}
+
+      {game && editing !== null && (
+        <EditPlayer
+          game={game}
+          truth={truth}
+          playerId={editing}
+          busy={busy}
+          onClose={() => setEditing(null)}
+          onSave={(edit) =>
+            run(async () => {
+              await savePlayer(game, truth, editing, edit);
+              setEditing(null);
+            })
+          }
+        />
       )}
     </main>
   );
@@ -267,7 +284,19 @@ function CsvUpload({ game, busy, run, compact }: { game: Seg2Game | null; busy: 
   );
 }
 
-function RoundControls({ game, truth, busy, run }: { game: Seg2Game; truth: { [id: string]: number }; busy: boolean; run: RunFn }) {
+function RoundControls({
+  game,
+  truth,
+  busy,
+  run,
+  onEdit,
+}: {
+  game: Seg2Game;
+  truth: { [id: string]: number };
+  busy: boolean;
+  run: RunFn;
+  onEdit: (id: number) => void;
+}) {
   const player = game.players.find((p) => p.id === game.currentId);
   const live = useRoundVotes(game.roundKey);
   const truthIndex = player ? truth[player.id] : undefined;
@@ -316,7 +345,7 @@ function RoundControls({ game, truth, busy, run }: { game: Seg2Game; truth: { [i
       await updateDoc(gameRef, {
         ...upd,
         result: { truthIndex, counts, total, correctIds },
-        [`done.${player.id}`]: { truthIndex, fooled: total - counts[truthIndex], total },
+        [`done.${player.id}`]: { truthIndex, fooled: total - counts[truthIndex], total, roundKey: game.roundKey, correctIds },
         shown: [0, 1, 2],
       });
     });
@@ -337,7 +366,12 @@ function RoundControls({ game, truth, busy, run }: { game: Seg2Game; truth: { [i
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-widest text-zinc-500">On stage</p>
-          <p className="font-display text-4xl font-black leading-none">{player.name}</p>
+          <div className="flex items-center gap-3">
+            <p className="font-display text-4xl font-black leading-none">{player.name}</p>
+            <button disabled={busy} onClick={() => onEdit(player.id)} className="btn btn-ghost text-xs py-1">
+              Edit
+            </button>
+          </div>
         </div>
         <div className="text-right">
           <p className="font-display text-4xl font-black">{game.result ? game.result.total : live.total}</p>
@@ -441,7 +475,135 @@ async function selectPlayer(game: Seg2Game, id: number) {
   });
 }
 
-function PlayerGrid({ game, busy, run }: { game: Seg2Game; busy: boolean; run: RunFn }) {
+interface PlayerEdit {
+  name: string;
+  statements: [string, string, string];
+  truthIndex: number;
+}
+
+async function savePlayer(game: Seg2Game, truth: { [id: string]: number }, target: number | 'new', edit: PlayerEdit) {
+  const id = target === 'new' ? Math.max(0, ...game.players.map((p) => p.id)) + 1 : target;
+  const player = { id, name: edit.name, statements: edit.statements };
+  const players = target === 'new' ? [...game.players, player] : game.players.map((p) => (p.id === id ? player : p));
+  const upd: Record<string, unknown> = { players };
+
+  const d = game.done[id];
+  if (d && truth[id] !== edit.truthIndex) {
+    if (!d.roundKey) throw new Error('This round was revealed before score recalculation existed — undo the reveal and reveal again instead.');
+    // Re-tally the already-revealed round against the new truth.
+    const snap = await getDocs(query(votesCol, where('roundKey', '==', d.roundKey)));
+    const counts: [number, number, number] = [0, 0, 0];
+    const correctIds: string[] = [];
+    (d.correctIds ?? []).forEach((cid) => (upd[`voterScores.${cid}.correct`] = increment(-1)));
+    snap.docs.forEach((vd) => {
+      const v = vd.data() as { clientId: string; name: string; choice: number };
+      if (v.choice < 0 || v.choice > 2 || !/^v[a-z0-9]+$/.test(v.clientId)) return;
+      counts[v.choice]++;
+      if (v.choice === edit.truthIndex) {
+        correctIds.push(v.clientId);
+        upd[`voterScores.${v.clientId}.name`] = v.name;
+        upd[`voterScores.${v.clientId}.correct`] = increment(1);
+      }
+    });
+    const total = counts[0] + counts[1] + counts[2];
+    upd[`done.${id}`] = { truthIndex: edit.truthIndex, fooled: total - counts[edit.truthIndex], total, roundKey: d.roundKey, correctIds };
+    if (game.currentId === id && game.result && game.roundKey === d.roundKey) {
+      upd.result = { truthIndex: edit.truthIndex, counts, total, correctIds };
+    }
+  }
+
+  await setDoc(answersRef, { truth: { [id]: edit.truthIndex } }, { merge: true });
+  await updateDoc(gameRef, upd);
+}
+
+function EditPlayer({
+  game,
+  truth,
+  playerId,
+  busy,
+  onClose,
+  onSave,
+}: {
+  game: Seg2Game;
+  truth: { [id: string]: number };
+  playerId: number | 'new';
+  busy: boolean;
+  onClose: () => void;
+  onSave: (edit: PlayerEdit) => void;
+}) {
+  const existing = playerId === 'new' ? null : game.players.find((p) => p.id === playerId);
+  const [name, setName] = useState(existing?.name ?? '');
+  const [statements, setStatements] = useState<[string, string, string]>(existing ? [...existing.statements] : ['', '', '']);
+  const [truthIndex, setTruthIndex] = useState<number>(existing ? (truth[existing.id] ?? 0) : 0);
+
+  const revealed = !!existing && !!game.done[existing.id];
+  const truthChanged = !!existing && truth[existing.id] !== truthIndex;
+  const valid = !!name.trim() && statements.every((s) => s.trim());
+
+  const save = () => {
+    if (!valid) return;
+    if (revealed && truthChanged && !confirm('This player was already revealed. Changing the truth will recalculate audience scores for their round. Continue?')) return;
+    onSave({
+      name: name.trim(),
+      statements: statements.map((s) => s.trim()) as [string, string, string],
+      truthIndex,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={onClose}>
+      <div className="card w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-2xl font-bold uppercase">{existing ? 'Edit player' : 'Add player'}</h2>
+          {existing?.id === game.currentId && <span className="text-xs text-amber-400">On stage — changes show live</span>}
+        </div>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-zinc-400">Name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-2 outline-none focus:border-amber-500"
+          />
+        </label>
+        {statements.map((s, i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-display uppercase tracking-widest" style={{ color: STMT_COLORS[i] }}>
+                Statement {i + 1}
+              </span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="truth" checked={truthIndex === i} onChange={() => setTruthIndex(i)} />
+                <span className={truthIndex === i ? 'text-green-400 font-semibold' : 'text-zinc-500'}>
+                  {truthIndex === i ? 'TRUTH' : 'Mark as truth'}
+                </span>
+              </label>
+            </div>
+            <textarea
+              value={s}
+              rows={2}
+              onChange={(e) => setStatements((prev) => prev.map((x, j) => (j === i ? e.target.value : x)) as [string, string, string])}
+              className="rounded-lg bg-zinc-900 px-3 py-2 outline-none border"
+              style={{ borderColor: truthIndex === i ? '#16a34a' : '#3f3f46' }}
+            />
+          </div>
+        ))}
+        {revealed && truthChanged && (
+          <p className="text-sm text-amber-400">Already revealed — saving will recalculate audience scores for this round.</p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="btn btn-ghost">
+            Cancel
+          </button>
+          <button disabled={busy || !valid} onClick={save} className="btn btn-amber">
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlayerGrid({ game, busy, run, onEdit }: { game: Seg2Game; busy: boolean; run: RunFn; onEdit: (id: number | 'new') => void }) {
   const [search, setSearch] = useState('');
   const doneCount = Object.keys(game.done).length;
   const list = useMemo(() => {
@@ -455,36 +617,52 @@ function PlayerGrid({ game, busy, run }: { game: Seg2Game; busy: boolean; run: R
         <h2 className="font-display text-xl font-bold uppercase">
           Players <span className="text-zinc-500">{doneCount}/{game.players.length} done</span>
         </h2>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name…"
-          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm outline-none focus:border-amber-500"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name…"
+            className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm outline-none focus:border-amber-500"
+          />
+          <button disabled={busy || game.players.length >= MAX_PLAYERS} onClick={() => onEdit('new')} className="btn btn-ghost text-sm py-1.5">
+            + Add player
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 max-h-[420px] overflow-auto pr-1">
         {list.map((p) => {
           const d = game.done[p.id];
           const current = p.id === game.currentId;
           return (
-            <button
+            <div
               key={p.id}
-              disabled={busy || current}
-              onClick={() => run(() => selectPlayer(game, p.id))}
-              className="text-left rounded-lg px-3 py-2 border transition-colors"
+              className="relative rounded-lg border transition-colors"
               style={{
                 borderColor: current ? '#f59e0b' : d ? '#14532d' : '#27272a',
                 background: current ? 'rgba(245,158,11,0.15)' : d ? 'rgba(20,83,45,0.2)' : '#0b0b0d',
               }}
             >
-              <p className="text-sm font-semibold truncate">
-                <span className="text-zinc-500 mr-1">{p.id}.</span>
-                {p.name}
-              </p>
-              <p className="text-xs text-zinc-500">
-                {current ? 'On stage' : d ? `Fooled ${d.total ? Math.round((d.fooled / d.total) * 100) : 0}%` : 'Not played'}
-              </p>
-            </button>
+              <button
+                disabled={busy || current}
+                onClick={() => run(() => selectPlayer(game, p.id))}
+                className="w-full text-left px-3 py-2 pr-12"
+              >
+                <p className="text-sm font-semibold truncate">
+                  <span className="text-zinc-500 mr-1">{p.id}.</span>
+                  {p.name}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {current ? 'On stage' : d ? `Fooled ${d.total ? Math.round((d.fooled / d.total) * 100) : 0}%` : 'Not played'}
+                </p>
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onEdit(p.id)}
+                className="absolute top-1.5 right-1.5 text-xs text-zinc-400 hover:text-amber-400 px-1.5 py-0.5 rounded bg-zinc-900"
+              >
+                Edit
+              </button>
+            </div>
           );
         })}
       </div>

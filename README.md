@@ -34,7 +34,10 @@ Karan,I studied in London for 2 years,I failed my driving test 5 times,I have a 
 3. **Open voting**: phones can now pick a statement, and change it until voting closes.
 4. **Reveal truth**: voting closes, the truth lights up, and everyone who picked it gets +1.
    The player's "fooled %" is recorded. **Undo reveal** takes those points back.
-5. Overlays: **Top spotters** (audience leaderboard), **Best liars** (players by % fooled), **Join QR**.
+5. **Edit** (on any player tile, or next to the player on stage) changes the name, statements and
+   which one is the truth, live on phones and the display. **+ Add player** adds one mid-show.
+   Changing the truth after a reveal re-tallies that round and fixes audience scores.
+6. Overlays: **Top spotters** (audience leaderboard), **Best liars** (players by % fooled), **Join QR**.
 
 ## Deploy (Vercel)
 
