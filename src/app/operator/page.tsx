@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { User, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   deleteField,
   getDocs,
@@ -15,7 +14,7 @@ import {
   writeBatch,
   CollectionReference,
 } from 'firebase/firestore';
-import { auth, db, OPERATOR_EMAIL } from '@/lib/firebase';
+import { db, OPERATOR_PASSCODE } from '@/lib/firebase';
 import {
   MAX_PLAYERS,
   Overlay,
@@ -34,33 +33,41 @@ import {
   votesCol,
 } from '@/lib/game';
 
-export default function OperatorPage() {
-  const [user, setUser] = useState<User | null | undefined>(undefined);
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+const UNLOCK_KEY = 'seg2_operator_unlocked';
 
-  if (user === undefined) return null;
-  if (!user || user.email !== OPERATOR_EMAIL) return <Login wrongUser={!!user} />;
-  return <Panel />;
+export default function OperatorPage() {
+  const [unlocked, setUnlocked] = useState<boolean | null>(null);
+  useEffect(() => {
+    try {
+      setUnlocked(sessionStorage.getItem(UNLOCK_KEY) === '1');
+    } catch {
+      setUnlocked(false);
+    }
+  }, []);
+
+  const lock = () => {
+    try {
+      sessionStorage.removeItem(UNLOCK_KEY);
+    } catch {}
+    setUnlocked(false);
+  };
+
+  if (unlocked === null) return null;
+  if (!unlocked) return <Login onUnlock={() => setUnlocked(true)} />;
+  return <Panel onLock={lock} />;
 }
 
-function Login({ wrongUser }: { wrongUser: boolean }) {
+function Login({ onUnlock }: { onUnlock: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true);
-    setError('');
+    if (password.trim() !== OPERATOR_PASSCODE) return setError('Wrong passcode.');
     try {
-      if (wrongUser) await signOut(auth);
-      await signInWithEmailAndPassword(auth, OPERATOR_EMAIL, password);
-    } catch (err) {
-      console.error(err);
-      setError('Wrong password (or the operator account has not been created yet).');
-    } finally {
-      setBusy(false);
-    }
+      sessionStorage.setItem(UNLOCK_KEY, '1');
+    } catch {}
+    onUnlock();
   };
 
   return (
@@ -73,12 +80,12 @@ function Login({ wrongUser }: { wrongUser: boolean }) {
           autoFocus
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Operator password"
+          placeholder="Operator passcode"
           className="rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 outline-none focus:border-amber-500"
         />
         {error && <p className="text-red-400 text-sm">{error}</p>}
-        <button disabled={busy || !password} className="btn btn-amber">
-          {busy ? 'Signing in…' : 'Sign in'}
+        <button disabled={!password} className="btn btn-amber">
+          Unlock
         </button>
       </form>
     </main>
@@ -96,7 +103,7 @@ async function deleteAll(col: CollectionReference) {
   }
 }
 
-function Panel() {
+function Panel({ onLock }: { onLock: () => void }) {
   const game = useGame();
   const [truth, setTruth] = useState<{ [id: string]: number }>({});
   const [joined, setJoined] = useState(0);
@@ -141,8 +148,8 @@ function Panel() {
           <a href="/display" target="_blank" className="text-amber-400 underline">
             Open display
           </a>
-          <button onClick={() => signOut(auth)} className="text-zinc-500 underline">
-            Sign out
+          <button onClick={onLock} className="text-zinc-500 underline">
+            Lock
           </button>
         </div>
       </header>

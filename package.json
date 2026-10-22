@@ -6,7 +6,7 @@
     "dev": "next dev -p 3020",
     "build": "next build",
     "start": "next start -p 3020",
-    "deploy:rules": "cd ../web && firebase use prod && firebase deploy --only firestore:rules"
+    "deploy:rules": "firebase deploy --only firestore:rules"
   },
   "dependencies": {
     "firebase": "^12.1.0",

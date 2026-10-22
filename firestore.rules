@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Dedicated project for the standalone Round 2 app (lie-hard-townhall).
+    // No sign-in anywhere: the audience plays with a name, the operator page is
+    // behind an in-app passcode. Nothing else lives in this project.
+
+    function game() {
+      return get(/databases/$(database)/documents/seg2Game/live).data;
+    }
+
+    match /seg2Game/{document} {
+      allow read, write: if true;
+    }
+
+    match /seg2Private/{document} {
+      allow read, write: if true;
+    }
+
+    match /seg2Voters/{clientId} {
+      allow read, delete: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'joinedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 30;
+    }
+
+    // One vote per phone per round (doc id = <roundKey>_<clientId>), accepted
+    // only while voting is open for the current round.
+    match /seg2Votes/{voteId} {
+      allow read, delete: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['clientId', 'name', 'roundKey', 'choice', 'ts'])
+        && voteId == request.resource.data.roundKey + '_' + request.resource.data.clientId
+        && request.resource.data.clientId.matches('^v[a-z0-9]{8,40}$')
+        && request.resource.data.choice in [0, 1, 2]
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 30
+        && game().votingOpen == true
+        && game().roundKey == request.resource.data.roundKey;
+    }
+  }
+}
