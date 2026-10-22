@@ -19,8 +19,10 @@ import {
   MAX_PLAYERS,
   Overlay,
   ParsedCsv,
+  SLOT_LETTERS,
   STMT_COLORS,
   Seg2Game,
+  screenOrder,
   answersRef,
   bestLiars,
   emptyGame,
@@ -319,7 +321,7 @@ function RoundControls({
   const toggleShown = (i: number) =>
     run(() =>
       updateDoc(gameRef, {
-        shown: game.shown.includes(i) ? game.shown.filter((x) => x !== i) : [...game.shown, i].sort(),
+        shown: game.shown.includes(i) ? game.shown.filter((x) => x !== i) : [...game.shown, i],
       }),
     );
 
@@ -346,7 +348,7 @@ function RoundControls({
         ...upd,
         result: { lieIndex, counts, total, correctIds },
         [`done.${player.id}`]: { lieIndex, fooled: total - counts[lieIndex], total, roundKey: game.roundKey, correctIds },
-        shown: [0, 1, 2],
+        shown: screenOrder(game.shown),
       });
     });
 
@@ -383,6 +385,7 @@ function RoundControls({
         {player.statements.map((s, i) => {
           const isLie = lieIndex === i;
           const shown = game.shown.includes(i) || game.votingOpen || !!game.result;
+          const screenNo = shown ? screenOrder(game.shown).indexOf(i) + 1 : null;
           const count = game.result ? game.result.counts[i] : live.counts[i];
           return (
             <div
@@ -391,8 +394,9 @@ function RoundControls({
               style={{ border: `2px solid ${isLie ? '#dc2626' : '#27272a'}`, background: isLie ? 'rgba(220,38,38,0.08)' : '#0b0b0d' }}
             >
               <div className="flex items-center justify-between">
-                <span className="font-display uppercase tracking-widest text-sm" style={{ color: STMT_COLORS[i] }}>
-                  Statement {i + 1}
+                <span className="font-display uppercase tracking-widest text-sm" style={{ color: '#a1a1aa' }}>
+                  {SLOT_LETTERS[i]}
+                  {screenNo && <span style={{ color: STMT_COLORS[screenNo - 1] }}> · Screen #{screenNo}</span>}
                 </span>
                 <span className={`text-xs font-bold ${isLie ? 'text-red-400' : 'text-green-400'}`}>{isLie ? 'LIE' : 'TRUTH'}</span>
               </div>
@@ -414,7 +418,7 @@ function RoundControls({
 
       <div className="flex flex-wrap gap-2">
         {!game.result && !game.votingOpen && (
-          <button disabled={busy} onClick={() => run(() => updateDoc(gameRef, { votingOpen: true, shown: [0, 1, 2] }))} className="btn btn-green">
+          <button disabled={busy} onClick={() => run(() => updateDoc(gameRef, { votingOpen: true, shown: screenOrder(game.shown) }))} className="btn btn-green">
             Open voting
           </button>
         )}
@@ -568,8 +572,8 @@ function EditPlayer({
         {statements.map((s, i) => (
           <div key={i} className="flex flex-col gap-1">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-display uppercase tracking-widest" style={{ color: STMT_COLORS[i] }}>
-                Statement {i + 1}
+              <span className="font-display uppercase tracking-widest" style={{ color: '#a1a1aa' }}>
+                Statement {SLOT_LETTERS[i]}
               </span>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="lie" checked={lieIndex === i} onChange={() => setLieIndex(i)} />

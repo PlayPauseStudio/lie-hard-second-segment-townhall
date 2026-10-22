@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { STMT_COLORS, Seg2Game, bestLiars, topVoters, useGame, useRoundVotes } from '@/lib/game';
+import { STMT_COLORS, Seg2Game, bestLiars, screenOrder, topVoters, useGame, useRoundVotes } from '@/lib/game';
 
 const AMBER = '#f59e0b';
 
@@ -72,6 +72,7 @@ function RoundScreen({ game }: { game: Seg2Game }) {
   const counts = result ? result.counts : live.counts;
   const total = result ? result.total : live.total;
   const showBars = game.showVoteBars || !!result;
+  const order = screenOrder(game.shown);
 
   return (
     <div className="w-full h-full flex flex-col" style={{ padding: '3vw 4vw', gap: '2vw' }}>
@@ -88,7 +89,7 @@ function RoundScreen({ game }: { game: Seg2Game }) {
               className="font-display font-black uppercase animate-reveal-pop leading-none"
               style={{ fontSize: '4.4vw', color: '#f87171', textShadow: '0 0 4vw rgba(248,113,113,0.45)' }}
             >
-              Statement {result.lieIndex + 1} is the lie
+              Statement {order.indexOf(result.lieIndex) + 1} is the lie
             </p>
           ) : game.votingOpen ? (
             <>
@@ -105,10 +106,11 @@ function RoundScreen({ game }: { game: Seg2Game }) {
 
       {/* Statements */}
       <div className="flex-1 min-h-0 grid grid-cols-3" style={{ gap: '1.5vw' }}>
-        {player.statements.map((text, i) => {
+        {order.map((i, slot) => {
+          const text = player.statements[i];
           const visible = game.votingOpen || !!result || game.shown.includes(i);
           const isLie = result?.lieIndex === i;
-          const color = result ? (isLie ? '#f87171' : '#4ade80') : STMT_COLORS[i];
+          const color = result ? (isLie ? '#f87171' : '#4ade80') : STMT_COLORS[slot];
           const pct = total ? Math.round((counts[i] / total) * 100) : 0;
           return (
             <div
@@ -122,8 +124,8 @@ function RoundScreen({ game }: { game: Seg2Game }) {
               }}
             >
               <div className="flex items-center justify-between">
-                <p className="font-display uppercase tracking-widest" style={{ fontSize: '1.6vw', color: STMT_COLORS[i] }}>
-                  Statement {i + 1}
+                <p className="font-display uppercase tracking-widest" style={{ fontSize: '1.6vw', color: STMT_COLORS[slot] }}>
+                  Statement {slot + 1}
                 </p>
                 {result && (
                   <p className="font-display font-black uppercase animate-reveal-pop" style={{ fontSize: '2.2vw', color }}>

@@ -190,3 +190,14 @@ export function parseCsv(text: string): ParsedCsv {
 }
 
 export const STMT_COLORS = ['#fbbf24', '#a78bfa', '#34d399'];
+export const SLOT_LETTERS = ['A', 'B', 'C'];
+
+/**
+ * On-screen order of a player's statements: revealed ones first, left to right
+ * in the order the operator revealed them, then the still-hidden ones. Screen
+ * numbering ("Statement 1, 2, 3") follows this order, so it gives nothing away.
+ */
+export function screenOrder(shown: number[]): number[] {
+  const revealed = shown.filter((i, k) => i >= 0 && i <= 2 && shown.indexOf(i) === k);
+  return [...revealed, ...[0, 1, 2].filter((i) => !revealed.includes(i))];
+}

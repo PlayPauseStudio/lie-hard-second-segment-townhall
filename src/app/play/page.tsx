@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { STMT_COLORS, Seg2Vote, useGame, voteId, votersCol } from '@/lib/game';
+import { STMT_COLORS, Seg2Vote, screenOrder, useGame, voteId, votersCol } from '@/lib/game';
 
 const CID_KEY = 'seg2_client';
 const NAME_KEY = 'seg2_name';
@@ -181,7 +181,8 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
           {statusLine}
         </p>
         <div className="flex flex-col gap-3">
-          {player.statements.map((text, i) => {
+          {screenOrder(game.shown).map((i, slot) => {
+            const text = player.statements[i];
             const visible = game.votingOpen || !!result || game.shown.includes(i);
             const isChosen = chosen === i;
             const isLie = result?.lieIndex === i;
@@ -196,7 +197,7 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
                 bg = 'rgba(113,113,122,0.12)';
               }
             } else if (isChosen) {
-              border = STMT_COLORS[i];
+              border = STMT_COLORS[slot];
               bg = 'rgba(245,158,11,0.12)';
             }
             return (
@@ -210,9 +211,9 @@ function Playing({ clientId, name, onRename }: { clientId: string; name: string;
                 <div className="flex items-center justify-between mb-1">
                   <span
                     className="font-display uppercase tracking-widest text-sm"
-                    style={{ color: STMT_COLORS[i] }}
+                    style={{ color: STMT_COLORS[slot] }}
                   >
-                    Statement {i + 1}
+                    Statement {slot + 1}
                   </span>
                   {result && isLie && <span className="text-red-400 text-sm font-semibold">LIE</span>}
                   {result && !isLie && <span className="text-green-400 text-sm font-semibold">TRUTH</span>}
